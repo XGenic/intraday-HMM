@@ -14,9 +14,11 @@ leakage regressions, embargo sensitivity, session-bootstrap confidence intervals
 state diagnostics, auditable artifacts, and a self-contained HTML report. An
 optional cost-aware long/flat simulation is implemented and disabled by default.
 
-**No real market dataset has been supplied or evaluated.** Verification so far
-uses hand-constructed fixtures and synthetic market bars. Do not interpret those
-results as evidence of forecasting skill or profitability.
+**Alpaca historical SIP access is confirmed, but no research-sized real market
+dataset has been downloaded or evaluated.** A single real SPY session passed
+basic access and bar-integrity checks on 2026-09-25. Full pipeline verification
+still uses hand-constructed fixtures and synthetic market bars. Neither those
+results nor the access check establish forecasting skill or profitability.
 
 The detailed research specification is
 `Intraday_Latent_Regime_Retrieval_Codex_Handoff.md`. Its final
@@ -27,13 +29,19 @@ Repository: `https://github.com/XGenic/intraday-HMM` (private, branch `main`).
 
 ## Next-session priorities
 
-1. Obtain a properly licensed, timezone-aware SPY 5-minute OHLCV Parquet dataset.
-   Use at least 126 training sessions plus a meaningful out-of-sample period;
-   preferably use enough data for a year of training and several market regimes.
-2. Confirm whether vendor timestamps label bar starts or ends, and whether an
-   optional vendor VWAP is per-bar. Set the configuration explicitly; do not guess.
+1. Recreate the locked Python environment on this machine; `uv`, `.venv`, and
+   the project dependencies are not yet installed here. Rerun the existing tests.
+2. Implement a repeatable Alpaca downloader using the locally supplied credentials,
+   explicit `feed=sip`, `timeframe=5Min`, pagination, and a recorded adjustment
+   policy. The proposed archive is 2019-2025; only one 2025 session has been fetched.
+   Preserve vendor responses/provenance, explicitly filter exchange regular hours,
+   and write timezone-aware SPY OHLCV Parquet. Configure `timestamp_label: start`
+   and preserve the vendor's per-bar VWAP. Keep all model/evaluation defaults frozen.
 3. Validate the real dataset, inspect missing sessions/bars and coverage, then run
-   the frozen baseline configuration. Do not tune against final OOS results.
+   the frozen baseline configuration. Use at least 126 training sessions plus a
+   meaningful out-of-sample period. Measure runtime and artifact size on a shorter
+   contiguous period before a multi-year evaluation. Do not tune against final
+   OOS results.
 4. Inspect refit failures/degeneracy, clock-time state concentration, neighbor
    audit examples, fold stability, and HMM-trajectory versus raw-kNN intervals.
 5. Record the actual empirical conclusion, including a negative or inconclusive
@@ -41,7 +49,45 @@ Repository: `https://github.com/XGenic/intraday-HMM` (private, branch `main`).
    real-data comparison is trustworthy.
 
 There is no unfinished HMM/report scaffold and no known failing test at handoff.
-The missing prerequisite for an empirical market conclusion is real input data.
+The remaining prerequisites for an empirical market conclusion are the local
+runtime setup and a validated real dataset with sufficient history.
+
+## Alpaca source and access check (2026-09-25)
+
+Alpaca is the selected first source. Its documented historical coverage begins in
+2016. The current FAQ permits historical SIP requests without a paid subscription
+when the request end is at least 15 minutes old. This account successfully returned
+HTTP 200 for the historical SIP sample below; access across the proposed archive
+has not yet been tested. Explicitly select SIP (consolidated exchange coverage)
+because the project's volume features require consistent market coverage.
+
+- Credentials are stored locally in the ignored root `.env` file as
+  `APCA_API_KEY_ID` and `APCA_API_SECRET_KEY`. Load them privately; never print,
+  commit, or include them in manifests. The existing pipeline does not yet load
+  `.env` or implement an Alpaca downloader.
+- Request: `GET https://data.alpaca.markets/v2/stocks/SPY/bars`, with
+  `feed=sip`, `timeframe=5Min`, `adjustment=raw`, `sort=asc`, `limit=10000`,
+  `start=2025-01-02T14:30:00Z`, and `end=2025-01-02T20:55:00Z`.
+- Received all 78 expected regular-session bars for 2025-01-02, with no further
+  page. UTC timestamps ran from 14:30 through 20:55 at contiguous five-minute
+  intervals. Finite positive prices/VWAP, nonnegative volume, and OHLC consistency
+  passed basic checks.
+- Alpaca timestamps label bar starts, and `vw` is the per-bar VWAP. Use
+  `data.timestamp_label: start` for an unshifted Alpaca export. The shipped baseline
+  still says `end` and has not been changed; do not run that default against a
+  start-stamped file without an explicit configuration update.
+- The sanitized request parameters and response are saved locally at
+  `data/raw/alpaca/SPY_5m_access_check_2025-01-02.json`. Authentication headers are
+  not saved. This ignored sample does not accompany a clone.
+- The check used Python's standard library. No Parquet conversion, project
+  `validate-data` command, feature calculation, HMM fit, or empirical evaluation
+  has run on these bars. No reusable download script has been added yet.
+
+Vendor references:
+[plans and history](https://docs.alpaca.markets/us/docs/about-market-data-api),
+[historical SIP access](https://docs.alpaca.markets/us/docs/market-data-faq),
+[bars API and pagination](https://docs.alpaca.markets/us/reference/stockbarsingle-1),
+[timestamp and VWAP construction](https://alpaca.markets/learn/stock-minute-bars).
 
 ## Environment and commands
 
@@ -49,6 +95,12 @@ Python >=3.11; development and smoke verification used Python 3.12.3. Dependency
 versions are locked in `uv.lock`. NumPy is bounded below 2.4 for compatibility with
 the selected pandas 2.x stack. Do not casually upgrade numerical dependencies
 without rerunning deterministic-fit and leakage checks.
+
+The current Windows workspace has Python 3.13.6, but no `uv`, virtual environment,
+or installed research/test dependencies. The 149-test result below belongs to
+the prior implementation environment and has not been reproduced on this machine.
+The local folder currently has no `.git` metadata; the repository remains on
+GitHub at the URL above.
 
 ```bash
 uv sync --locked --extra dev
@@ -173,7 +225,7 @@ ignored by Git. They are **not uploaded to GitHub**. Empty data directories are
 also absent from a fresh clone. Keep licensed input data and research outputs in
 appropriate separate storage.
 
-## Last completed verification
+## Last completed full-pipeline verification (prior environment)
 
 - **149 tests passed**; Ruff lint and formatting checks passed.
 - Full synthetic CLI smoke: 2,381 bars across 31 exchange sessions, including DST,
