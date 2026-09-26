@@ -1,0 +1,25 @@
+{
+  "status": "passed",
+  "forecast_rows_checked": 378360,
+  "neighbor_rows_checked": 131310766,
+  "maximum_neighbors_per_historical_session": 3,
+  "reconstructed_distributions": 180,
+  "checks": [
+    "source checksum",
+    "paired cohorts",
+    "feature and model cutoffs",
+    "neighbor availability and embargo",
+    "same-model identities",
+    "saved outcomes versus canonical bars",
+    "unique capped kNN cohorts",
+    "sample forecast distribution reconstruction"
+  ],
+  "refits_reconstructed_without_fitting": [
+    "2019-W28",
+    "2019-W41",
+    "2020-W01"
+  ],
+  "representation_rows_checked": 360,
+  "future_extension_identical_forecast_rows": 30960,
+  "source_snapshot_files_verified": 32
+}

@@ -5,6 +5,7 @@ import hashlib
 import json
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from importlib.metadata import version
 from pathlib import Path
@@ -36,16 +37,23 @@ def git_commit() -> str | None:
 
 
 def run_research(config_path: str | Path) -> Path:
+    started = time.perf_counter()
     config = load_config(config_path)
     bars, quality = load_and_validate(config)
+    with config.data.path.open("rb") as handle:
+        raw_hash = hashlib.file_digest(handle, "sha256").hexdigest()
+    provenance = config.data.path.with_suffix(".manifest.json")
+    source = None
+    if provenance.exists():
+        source = json.loads(provenance.read_text(encoding="utf-8"))
+        if source.get("output_sha256") != raw_hash:
+            raise ValueError("Input dataset checksum differs from its source manifest")
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S") + "-" + uuid4().hex[:8]
     run_dir = config.report.output_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
     diagnostics_dir = run_dir / "state_diagnostics"
     diagnostics_dir.mkdir()
     save_config(config, run_dir / "config.yaml")
-    with config.data.path.open("rb") as handle:
-        raw_hash = hashlib.file_digest(handle, "sha256").hexdigest()
     embargoes = sorted(
         set([config.retrieval.embargo_sessions, *config.sensitivity.embargo_sessions])
     )
@@ -67,6 +75,12 @@ def run_research(config_path: str | Path) -> Path:
         "hmm_inference": "causal_forward_filter",
         "embargoes": embargoes,
         "git_commit": git_commit(),
+        "source_sha256": {
+            str(path.relative_to(Path(__file__).parent)): hashlib.sha256(
+                path.read_bytes()
+            ).hexdigest()
+            for path in sorted(Path(__file__).parent.rglob("*.py"))
+        },
         "python_version": sys.version,
         "package_versions": {
             name: version(name)
@@ -82,8 +96,22 @@ def run_research(config_path: str | Path) -> Path:
         "status": "running",
     }
     write_json(run_dir / "data_manifest.json", manifest)
+    if source is not None:
+        write_json(run_dir / "source_manifest.json", source)
     write_json(run_dir / "data_quality.json", quality.to_dict())
     bars.to_parquet(run_dir / "bars.parquet", index=False)
+    print(f"Run directory: {run_dir}", file=sys.stderr, flush=True)
+
+    def save_diagnostic(diagnostic):
+        write_json(diagnostics_dir / f"{diagnostic['refit_id']}.json", diagnostic)
+        print(
+            f"{diagnostic['refit_id']}: {diagnostic['status']}; "
+            f"{diagnostic['training_sessions']} training sessions; "
+            f"elapsed {time.perf_counter() - started:.1f}s",
+            file=sys.stderr,
+            flush=True,
+        )
+
     try:
         with NeighborWriter(run_dir / "neighbors.parquet") as writer:
             result = evaluate(
@@ -91,9 +119,7 @@ def run_research(config_path: str | Path) -> Path:
                 config,
                 neighbor_sink=writer.write,
                 embargoes=embargoes,
-                diagnostic_sink=lambda diagnostic: write_json(
-                    diagnostics_dir / f"{diagnostic['refit_id']}.json", diagnostic
-                ),
+                diagnostic_sink=save_diagnostic,
             )
         result.predictions.to_parquet(run_dir / "predictions.parquet", index=False)
         result.representation_examples.to_parquet(
@@ -133,6 +159,11 @@ def run_research(config_path: str | Path) -> Path:
         )
         write_json(run_dir / "data_manifest.json", manifest)
         render_report(run_dir)
+        manifest["elapsed_seconds"] = time.perf_counter() - started
+        manifest["artifact_bytes"] = sum(
+            path.stat().st_size for path in run_dir.rglob("*") if path.is_file()
+        )
+        write_json(run_dir / "data_manifest.json", manifest)
     except Exception as exc:
         manifest.update(status="failed", error=str(exc))
         write_json(run_dir / "data_manifest.json", manifest)

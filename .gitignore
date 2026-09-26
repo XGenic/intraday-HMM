@@ -1,4 +1,8 @@
+# Local environments and tools
 .venv/
+.tools/
+.uv-cache/
+.mpl-cache/
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -6,9 +10,21 @@ __pycache__/
 .coverage
 htmlcov/
 *.egg-info/
-dist/
-data/raw/*
-data/processed/*
-runs/
+# Private inputs, generated outputs, and local working material
+/dist/
+/build/
+/data/
+/runs/
+/.local/
+/working-notes.md
 .env
 .env.*
+!/.env.example
+*.pem
+*.key
+
+# Editor and operating-system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,58 @@
+symbol: SPY
+bar_interval: 5m
+regular_hours_only: true
+data:
+  provider: parquet
+  path: ../data/processed/SPY_5m_2019.parquet
+  timestamp_label: start
+  calendar: XNYS
+  min_session_coverage: 0.8
+  synthetic: false
+features:
+  log_return: true
+  realized_vol_window: 12
+  range_fraction: true
+  volume_tod_adjusted: true
+  vwap_distance: true
+context_bars: 12
+retrieval:
+  k: 50
+  distance: euclidean
+  max_neighbors_per_session: 3
+  embargo_sessions: 1
+horizons_minutes:
+- 5
+- 15
+- 30
+- 60
+walk_forward:
+  min_training_sessions: 126
+  refit_frequency: weekly
+  n_folds: 3
+hmm:
+  n_states: 6
+  covariance_type: full
+  n_iter: 500
+  tol: 0.0001
+  min_covar: 0.001
+  random_state: 42
+  retry_seed_offsets:
+  - 0
+  - 1
+  - 2
+bootstrap:
+  n_resamples: 1000
+  confidence: 0.95
+sensitivity:
+  embargo_sessions:
+  - 0
+  - 1
+  - 5
+costs:
+  bps_per_side: 1.0
+trading:
+  enabled: false
+  threshold: 0.0
+report:
+  output_dir: ../runs/real-2019
+random_state: 42
